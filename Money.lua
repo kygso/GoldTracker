@@ -21,6 +21,29 @@ ZGT.COLOR = {
 	spent = { 0.900, 0.350, 0.320 },
 }
 
+-- Weapon skill lines the trainer reports (English names, lowercased for
+-- matching). Other locales have no entry, so their lines stay separate.
+local WEAPON_SKILLS = {}
+for _, name in ipairs({
+	"Axes", "Two-Handed Axes", "Bows", "Crossbows", "Daggers", "Fist Weapons",
+	"Guns", "Maces", "Two-Handed Maces", "Polearms", "Staves", "Swords",
+	"Two-Handed Swords", "Thrown", "Wands", "Unarmed",
+}) do
+	WEAPON_SKILLS[name:lower()] = true
+end
+
+-- Display name for a trainer skill line. The raw name is still what gets
+-- stored; this only changes how it is shown.
+function ZGT.TrainingGroup(skill)
+	if type(skill) ~= "string" or skill == "" then
+		return "Other"
+	end
+	if WEAPON_SKILLS[skill:lower()] then
+		return "Weapon"
+	end
+	return skill
+end
+
 local GOLD_ICON = "|TInterface\\MoneyFrame\\UI-GoldIcon:12:12:2:0|t"
 local SILVER_ICON = "|TInterface\\MoneyFrame\\UI-SilverIcon:12:12:2:0|t"
 local COPPER_ICON = "|TInterface\\MoneyFrame\\UI-CopperIcon:12:12:2:0|t"

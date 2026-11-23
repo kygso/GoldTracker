@@ -239,11 +239,71 @@ local function SignedAmount(spec, amount)
 	return amount
 end
 
+-- Training per skill line, biggest first. Whatever the split does not cover
+-- (spending recorded before the split existed) shows as "Other".
+local function TrainingEntries(snap)
+	local totals, entries, sum = {}, {}, 0
+	local by = type(snap.trainingBy) == "table" and snap.trainingBy or {}
+	for skill, amount in pairs(by) do
+		if type(skill) == "string" and type(amount) == "number" and amount > 0 then
+			local name = ZGT.TrainingGroup(skill)
+			totals[name] = (totals[name] or 0) + amount
+			sum = sum + amount
+		end
+	end
+	for name, amount in pairs(totals) do
+		entries[#entries + 1] = { name = name, amount = amount }
+	end
+	table.sort(entries, function(a, b)
+		if a.amount == b.amount then
+			return a.name < b.name
+		end
+		return a.amount > b.amount
+	end)
+	local rest = (snap.training or 0) - sum
+	if rest > 0 then
+		entries[#entries + 1] = { name = "Other", amount = rest }
+	end
+	return entries
+end
+
+local function AddTrainingLines(entries)
+	local muted = ZGT.COLOR.muted
+	for index = 1, #entries do
+		GameTooltip:AddDoubleLine("    " .. entries[index].name, ZGT.FormatMoney(-entries[index].amount), muted[1], muted[2], muted[3], 1, 1, 1)
+	end
+end
+
 local function AddBreakdown(snap)
 	for index = 1, #BREAKDOWN do
 		local spec = BREAKDOWN[index]
 		AddTipLine(spec.label, SignedAmount(spec, snap[spec.key]), ZGT.COLOR[spec.color])
+		if spec.key == "training" then
+			local entries = TrainingEntries(snap)
+			-- A lone "Other" is just the total again, so skip it here.
+			if not (#entries == 1 and entries[1].name == "Other") then
+				AddTrainingLines(entries)
+			end
+		end
 	end
+end
+
+local function ShowTrainingTip(owner)
+	local snap = detail and detail.view
+	if not snap then
+		GameTooltip:Hide()
+		return
+	end
+	local entries = TrainingEntries(snap)
+	GameTooltip:SetOwner(owner, "ANCHOR_RIGHT")
+	GameTooltip:ClearLines()
+	GameTooltip:AddLine("Training", 1, 0.86, 0.4)
+	if #entries == 0 then
+		GameTooltip:AddLine("No training in this period.", 0.7, 0.7, 0.7)
+	else
+		AddTrainingLines(entries)
+	end
+	GameTooltip:Show()
 end
 
 local function ShowDayTip(column)
@@ -679,6 +739,7 @@ function ZGT.RefreshDetail()
 		summary = summary .. "    |cff" .. hex .. percent .. "|r " .. versus
 	end
 	detail.summaryText:SetText(summary)
+	detail.view = view
 	detail.playedText:SetText("Played  " .. ZGT.FormatPlayed(view.played))
 
 	for index = 1, #sourceRows do
@@ -881,6 +942,19 @@ local function BuildDetail()
 			value:SetJustifyH("RIGHT")
 			value:SetTextColor(ZGT.COLOR[spec.color][1], ZGT.COLOR[spec.color][2], ZGT.COLOR[spec.color][3])
 			sourceRows[#sourceRows + 1] = { spec = spec, label = label, value = value }
+			if spec.key == "training" then
+				local hit = CreateFrame("Frame", nil, detail)
+				hit:SetPoint("TOPLEFT", detail, "TOPLEFT", originX, y)
+				hit:SetPoint("TOPRIGHT", detail, "TOPRIGHT", valueX, y)
+				hit:SetHeight(14)
+				hit:EnableMouse(true)
+				hit:SetScript("OnEnter", function(self)
+					ShowTrainingTip(self)
+				end)
+				hit:SetScript("OnLeave", function()
+					GameTooltip:Hide()
+				end)
+			end
 		end
 	end
 	BuildSourceColumn(INCOME_ROWS, 16, -270, 100, 112)

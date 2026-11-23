@@ -17,7 +17,7 @@ There are no classes. Each file adds functions to one shared table, `ZoraGoldTra
 `ZoraGoldTrackerDB` is the SavedVariables table.
 
 - `characters[Name-Surname].days["YYYY-MM-DD"]` holds one day. Forever's `UnitFullName` / `UnitName` return the first name and the surname; the surname is the key, not `GetRealmName()`. On login, older `Name-Realm` and `Name-Unknown` rows fold into the surname key only when no other surname key uses the same first name. Old rows cannot say which surname they belonged to, so if two characters share a first name, those old rows stay separate instead of being guessed.
-- A day stores income and spending as copper counts: `loot`, `auctions`, `vendor`, `quests`, `other`, `auctionBuy`, `deposit`, `flight`, `repairs`, `vendorBuy`, `training`, `spent`, plus `played` seconds and `auctionsLog`. Every field stays at or above zero except `deposit`. `deposit` is the net listing fee: posts add to it, and a returned deposit on a collected sale subtracts from it, so a day that got more back than it posted goes negative.
+- A day stores income and spending as copper counts: `loot`, `auctions`, `vendor`, `quests`, `other`, `auctionBuy`, `deposit`, `flight`, `repairs`, `vendorBuy`, `training`, `spent`, plus `played` seconds, `auctionsLog`, and `trainingBy`. `training` is the total trainer spend. `trainingBy` splits it by skill line (`{ Cooking = 1200, ["Feral Combat"] = 5000 }`) and never feeds `ZGT.Net`. Training bought before the split existed, or with no readable skill line, is in `training` only, and the ledger shows the gap as "Other". Every field stays at or above zero except `deposit`. `deposit` is the net listing fee: posts add to it, and a returned deposit on a collected sale subtracts from it, so a day that got more back than it posted goes negative.
 - `session` is `{ net, played }` for the current login. A UI reload keeps it. A fresh login replaces it.
 - `settings` stores ticker lock, scale, hidden state, and the screen points for the ticker and the ledger.
 
@@ -80,6 +80,8 @@ Recording and queries. The UI never writes day buckets itself.
 | `auctions` | `"seller"` invoice while taking inbox money. The pending `"seller_temp_invoice"` is not used | 5s |
 | `deposit` | `StartAuction`, `PostItem`, `PostCommodity`, `ConfirmPostItem`, `ConfirmPostCommodity` | 5s |
 | `flight`, `repairs`, `vendorBuy`, `training`, `auctionBuy` | Hooks around the purchase API. Bids and commodity buys stay `auctionBuy` | 3–5s |
+
+`BuyTrainerService(index)` reads `GetTrainerServiceSkillLine(index)` and carries it on the context as `skill`. `RecordDelta` adds the loss to `training` and to `trainingBy[skill]`. Class trainers report the spec ("Feral Combat"), professions report the profession ("Cooking"), so class spending splits by spec. Weapon skill lines ("Staves", "Two-Handed Maces", "Maces") are stored as reported and shown as one "Weapon" line by `ZGT.TrainingGroup` in `Money.lua`. That list matches English names only. The trainer-frame fallback in `Classify` has no index, so it counts in `training` with no skill.
 | `other` | A money chat line that no open window explains | 1.25s |
 
 If the context expired, `Classify` sniffs open frames (`MerchantFrame`, auction house, trainer, taxi, trade, mail) and the repair cursor / repair-all quote. A loss with the auction house open becomes `auctionBuy`, which is where a listing lands when its 5 second post context has already expired. Whatever is left becomes `loot` (recent loot window), `other` (gain), or `spent` (loss).

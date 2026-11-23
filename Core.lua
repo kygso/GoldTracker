@@ -59,6 +59,7 @@ local function BlankDay()
 	local day = {
 		auctionsLog = {},
 		characters = {},
+		trainingBy = {},
 	}
 	for index = 1, #DAY_FIELDS do
 		day[DAY_FIELDS[index]] = 0
@@ -74,6 +75,9 @@ local function NormalizeDay(day)
 	end
 	if type(day.auctionsLog) ~= "table" then
 		day.auctionsLog = {}
+	end
+	if type(day.trainingBy) ~= "table" then
+		day.trainingBy = {}
 	end
 	return day
 end
@@ -349,11 +353,40 @@ local function AppendLog(log, entry, key)
 	end
 end
 
+-- `training` is the total. `trainingBy` splits it by skill line and never
+-- feeds Net, so a missing or partial split cannot change the day's net.
+local function CopyTraining(target, day)
+	local copy = {}
+	if type(day.trainingBy) == "table" then
+		for skill, amount in pairs(day.trainingBy) do
+			if type(skill) == "string" and type(amount) == "number" then
+				copy[skill] = amount
+			end
+		end
+	end
+	target.trainingBy = copy
+end
+
+local function AddTraining(target, day)
+	if type(target.trainingBy) ~= "table" then
+		target.trainingBy = {}
+	end
+	if type(day.trainingBy) ~= "table" then
+		return
+	end
+	for skill, amount in pairs(day.trainingBy) do
+		if type(skill) == "string" and type(amount) == "number" then
+			target.trainingBy[skill] = (target.trainingBy[skill] or 0) + amount
+		end
+	end
+end
+
 local function CopyAmounts(target, day)
 	for index = 1, #DAY_FIELDS do
 		local field = DAY_FIELDS[index]
 		target[field] = day[field] or 0
 	end
+	CopyTraining(target, day)
 end
 
 local function AddAmounts(target, day)
@@ -361,6 +394,7 @@ local function AddAmounts(target, day)
 		local field = DAY_FIELDS[index]
 		target[field] = (target[field] or 0) + (day[field] or 0)
 	end
+	AddTraining(target, day)
 end
 
 local function CharacterParts(key)
@@ -799,6 +833,7 @@ local function SetContext(source, extra, ttl)
 		item = extra and extra.item or nil,
 		deposit = extra and extra.deposit or nil,
 		proceeds = extra and extra.proceeds or nil,
+		skill = extra and extra.skill or nil,
 	}
 end
 
@@ -1016,8 +1051,8 @@ local function ChatLine(text)
 	print(text)
 end
 
-local function AnnounceSpend(amount, source)
-	local label = SPEND_LABEL[source] or "Spent"
+local function AnnounceSpend(amount, source, skill)
+	local label = skill and (ZGT.TrainingGroup(skill) .. " training") or SPEND_LABEL[source] or "Spent"
 	local text = "-" .. ZGT.FormatMoney(amount) .. "  |cff9e9ea6" .. label .. "|r"
 	local function emit()
 		if GetTime() - lossChatAt < 1 then
@@ -1064,8 +1099,14 @@ local function RecordDelta(delta)
 		if not SPEND_SET[source] then
 			source = "spent"
 		end
-		day[source] = day[source] + math.abs(delta)
-		AnnounceSpend(math.abs(delta), source)
+		local amount = math.abs(delta)
+		day[source] = day[source] + amount
+		local skill
+		if source == "training" and extra and type(extra.skill) == "string" and extra.skill ~= "" then
+			skill = extra.skill
+			day.trainingBy[skill] = (day.trainingBy[skill] or 0) + amount
+		end
+		AnnounceSpend(amount, source, skill)
 	elseif source == "auctions" then
 		local refund = MatchedRefund(delta, extra)
 		if refund then
@@ -1215,8 +1256,18 @@ local function InstallHooks()
 	InstallWrap("BuybackItem", function()
 		MarkSpend("vendorBuy", 3)
 	end)
-	InstallWrap("BuyTrainerService", function()
-		MarkSpend("training", 4)
+	InstallWrap("BuyTrainerService", function(index)
+		-- The skill line names what was bought: "Cooking", "Riding", or the
+		-- class spec for class spells. A missing or secret value still records
+		-- the total under `training`, with no skill label.
+		local skill
+		if type(GetTrainerServiceSkillLine) == "function" then
+			local ok, line = pcall(GetTrainerServiceSkillLine, index)
+			if ok and ZGT.IsReadable(line) and type(line) == "string" and line ~= "" then
+				skill = line
+			end
+		end
+		SetContext("training", { skill = skill }, 4)
 	end)
 	InstallWrap("PlaceAuctionBid", function()
 		MarkSpend("auctionBuy", 5)
