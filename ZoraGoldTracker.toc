@@ -1,0 +1,11 @@
+## Interface: 16001
+## Title: Zora Gold Tracker
+## Notes: Account-wide daily gold per hour
+## Version: 0.1.0
+## SavedVariables: ZoraGoldTrackerDB
+
+Money.lua
+Core.lua
+Ticker.lua
+Detail.lua
+Sales.lua
