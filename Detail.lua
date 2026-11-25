@@ -641,6 +641,17 @@ local function UpdateChart(scope, rangeStart, rangeEnd)
 		Stack(column.loot, view.loot)
 		Stack(column.auctions, view.auctions)
 		Stack(column.vendor, view.vendor)
+		-- A net loss hangs below the zero line, on the same scale as the income stack.
+		local net = view.net or 0
+		if net < 0 then
+			local height = math.max(1, -net / span * (PLOT_H - 2))
+			column.deficit:Show()
+			column.deficit:ClearAllPoints()
+			column.deficit:SetPoint("TOPLEFT", column, "BOTTOMLEFT", barX, Y(0))
+			column.deficit:SetSize(barWidth, height)
+		else
+			column.deficit:Hide()
+		end
 		local monthChanged = index == 1 or view.dateKey:sub(6, 7) ~= days[index - 1].dateKey:sub(6, 7)
 		local dayNumber = tostring(tonumber(view.dateKey:sub(9, 10)))
 		local showLabel = not narrow or index == 1 or view.dateKey:sub(9, 10) == "01"
@@ -1029,7 +1040,7 @@ local function BuildDetail()
 
 	detail.legend = Font(detail, "GameFontHighlightSmall", 10)
 	detail.legend:SetPoint("TOPLEFT", 16, -420)
-	detail.legend:SetText("|cffd9b333Loot|r   |cff599ef9Auctions|r   |cfff28c33Vendored|r   |cfff2f2faNet|r")
+	detail.legend:SetText("|cffd9b333Loot|r   |cff599ef9Auctions|r   |cfff28c33Vendored|r   |cfff2f2faNet|r   |cffef4033Net loss|r")
 
 	local chart = CreateFrame("Frame", nil, detail)
 	chart:SetPoint("TOPLEFT", 16, -436)
@@ -1063,6 +1074,9 @@ local function BuildDetail()
 		ZGT.Paint(column.auctions, ZGT.COLOR.auctions, 0.95)
 		column.vendor = column:CreateTexture(nil, "ARTWORK")
 		ZGT.Paint(column.vendor, ZGT.COLOR.vendor, 0.95)
+		column.deficit = column:CreateTexture(nil, "ARTWORK")
+		ZGT.Paint(column.deficit, ZGT.COLOR.down, 0.9)
+		column.deficit:Hide()
 		column.label = Font(chart, "GameFontHighlightSmall", 8, 0.55, 0.55, 0.58)
 		column.label:SetPoint("TOP", column, "BOTTOM", 0, -1)
 		column.label:SetJustifyH("CENTER")
