@@ -6,7 +6,7 @@ local SPARK_W, SPARK_H = 76, 34
 local TICKER_W, TICKER_H = 300, 52
 local MIN_SCALE, MAX_SCALE, SCALE_STEP = 0.5, 2, 0.1
 
-local ticker, menu, catcher, rateText, sessionText, arrow, sparkBars
+local ticker, menu, catcher, rateText, sessionText, arrow, sparkBars, sparkFrame, sparkZero
 
 local function Trim(text)
 	if type(text) ~= "string" then
@@ -72,7 +72,14 @@ local function RestorePosition(frame, prefix, point, x, y)
 	end
 end
 
-local function PlaceBar(bar, height, color, alpha)
+local function PlaceBar(bar, height, color, alpha, baseline, below)
+	local x = bar.slotX or 0
+	bar:ClearAllPoints()
+	if below then
+		bar:SetPoint("TOPLEFT", sparkFrame, "BOTTOMLEFT", x, baseline)
+	else
+		bar:SetPoint("BOTTOMLEFT", sparkFrame, "BOTTOMLEFT", x, baseline)
+	end
 	bar:SetColorTexture(color[1], color[2], color[3], alpha)
 	bar:SetHeight(height)
 	bar:Show()
@@ -88,38 +95,43 @@ local function UpdateSpark(scope)
 		local view = ZGT.GetView(ZGT.DateOffset(today, -index), scope)
 		values[#values + 1] = view.net or 0
 	end
-	local minValue, maxValue = values[1], values[1]
-	for index = 2, #values do
-		if values[index] < minValue then
-			minValue = values[index]
-		end
-		if values[index] > maxValue then
-			maxValue = values[index]
-		end
-	end
-	if minValue == maxValue then
-		minValue = minValue - 1
-		maxValue = maxValue + 1
-	end
-	local largest = 0
+	-- Diverging chart: gains rise above a zero line, losses hang below it, on one shared scale.
+	local maxPos, maxNeg = 0, 0
 	for index = 1, #values do
-		if math.abs(values[index]) > largest then
-			largest = math.abs(values[index])
+		local value = values[index]
+		if value > maxPos then
+			maxPos = value
+		elseif -value > maxNeg then
+			maxNeg = -value
 		end
 	end
-	if largest == 0 then
-		largest = 1
+	local span = maxPos + maxNeg
+	local scale = span > 0 and (SPARK_H / span) or 0
+	local baseline = maxNeg * scale
+	if maxPos > 0 and maxNeg > 0 then
+		-- Keep room for the 2px minimum bar on both sides of the line.
+		baseline = math.min(math.max(baseline, 2), SPARK_H - 2)
 	end
+	local posRoom = SPARK_H - baseline
+	local negRoom = baseline
+
+	if sparkZero then
+		sparkZero:ClearAllPoints()
+		sparkZero:SetPoint("BOTTOMLEFT", sparkFrame, "BOTTOMLEFT", 0, math.max(0, math.min(baseline, SPARK_H - 1)))
+		sparkZero:Show()
+	end
+
 	for index = 1, #values do
 		local value = values[index]
 		local bar = sparkBars[index]
-		local height = math.max(2, math.abs(value) / largest * (SPARK_H - 2))
 		if value > 0 then
-			PlaceBar(bar, height, ZGT.COLOR.up, 0.95)
+			local height = math.min(posRoom, math.max(2, value * scale))
+			PlaceBar(bar, height, ZGT.COLOR.up, 0.95, baseline, false)
 		elseif value < 0 then
-			PlaceBar(bar, height, ZGT.COLOR.down, 0.95)
+			local height = math.min(negRoom, math.max(2, -value * scale))
+			PlaceBar(bar, height, ZGT.COLOR.down, 0.95, baseline, true)
 		else
-			PlaceBar(bar, 2, ZGT.COLOR.flat, 0.35)
+			PlaceBar(bar, 2, ZGT.COLOR.flat, 0.35, baseline, false)
 		end
 	end
 end
@@ -369,12 +381,19 @@ local function BuildTicker()
 	local spark = CreateFrame("Frame", nil, ticker)
 	spark:SetSize(SPARK_W, SPARK_H)
 	spark:SetPoint("RIGHT", -8, 0)
+	sparkFrame = spark
+	sparkZero = spark:CreateTexture(nil, "ARTWORK")
+	sparkZero:SetSize(SPARK_W, 1)
+	sparkZero:SetColorTexture(ZGT.COLOR.muted[1], ZGT.COLOR.muted[2], ZGT.COLOR.muted[3], 0.45)
+	sparkZero:SetPoint("BOTTOMLEFT", spark, "BOTTOMLEFT", 0, 0)
+	sparkZero:Hide()
 	sparkBars = {}
 	local slotWidth = SPARK_W / SPARK_DAYS
 	for index = 1, SPARK_DAYS do
 		local bar = spark:CreateTexture(nil, "OVERLAY")
 		bar:SetWidth(slotWidth - 3)
-		bar:SetPoint("BOTTOMLEFT", spark, "BOTTOMLEFT", (index - 1) * slotWidth + 1, 0)
+		bar.slotX = (index - 1) * slotWidth + 1
+		bar:SetPoint("BOTTOMLEFT", spark, "BOTTOMLEFT", bar.slotX, 0)
 		bar:Hide()
 		sparkBars[index] = bar
 	end
