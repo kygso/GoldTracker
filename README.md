@@ -86,7 +86,7 @@ Recording and queries. The UI never writes day buckets itself.
 
 If the context expired, `Classify` sniffs open frames (`MerchantFrame`, auction house, trainer, taxi, trade, mail) and the repair cursor / repair-all quote. A loss with the auction house open becomes `auctionBuy`, which is where a listing lands when its 5 second post context has already expired. Whatever is left becomes `loot` (recent loot window), `other` (gain), or `spent` (loss).
 
-`InstallWrap` both `hooksecurefunc`s the global and replaces it. The applicator therefore runs twice. `SetContext` is safe to repeat. Do not record gold inside those hooks. `InstallHooks` runs again when a merchant, mail, taxi, trainer, or auction window opens, so late-loaded Blizzard functions still get hooked. The `wrapped` table stops a second hook on the same function.
+`InstallWrap` only `hooksecurefunc`s the global. It never replaces a Blizzard global, because that taints the function and Blizzard UI like the trainer then blocks the addon. Do not record gold inside those hooks. `InstallHooks` runs again when a merchant, mail, taxi, trainer, or auction window opens, so late-loaded Blizzard functions still get hooked. The `wrapped` table stops a second hook on the same function.
 
 ### Chat spend lines
 
@@ -154,7 +154,7 @@ The list is virtualized. `VISIBLE` row frames are reused, `offset` is how many f
 
 **`RecordDelta` bucket rules.** Income fields stay positive. Spend fields other than `deposit` stay positive. `ZGT.Net` is the only subtraction. Writing a negative repair into `repairs` makes that repair add gold. A negative `deposit` is the refund credit and is meant to add gold. The refund is recorded on the day the sale mail is looted. Listings already stored under `auctionBuy` stay there. A cancel fee while the auction house is open still falls through to `auctionBuy`, because the deposit itself was charged at posting.
 
-**`InstallWrap` runs the hook twice.** Keep applicators idempotent. `HookSecure` (used for `C_AuctionHouse` and `C_TaxiMap`) is post-hook only and runs once.
+**Never replace Blizzard globals.** `InstallWrap` and `HookSecure` are both post-hook only. Overwriting a global like `BuyTrainerService` causes "blocked from an action only available to the Blizzard UI".
 
 **`FilterSpentGold` and `SkipToken`.** A wrong skip over `|c`, `|T`, or `|H` puts the minus inside a color code or an item link. Returning `true` from the filter deletes the chat line. `lossChatAt` is shared by the filter and `AnnounceSpend`.
 

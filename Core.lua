@@ -1210,18 +1210,13 @@ local function InstallWrap(name, applicator)
 		return
 	end
 	wrapped[current] = true
+	-- Post-hook only. Replacing a global Blizzard function taints it, and
+	-- protected UI (like the trainer) then blocks the addon.
 	if type(hooksecurefunc) == "function" then
 		hooksecurefunc(name, function(...)
 			pcall(applicator, ...)
 		end)
 	end
-	local original = current
-	local function wrapper(...)
-		pcall(applicator, ...)
-		return original(...)
-	end
-	wrapped[wrapper] = true
-	_G[name] = wrapper
 end
 
 local function MarkSpend(source, ttl)
